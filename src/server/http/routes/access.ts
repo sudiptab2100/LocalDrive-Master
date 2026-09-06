@@ -20,8 +20,12 @@ accessRouter.get('/', async (_req, res) => {
 })
 
 accessRouter.post('/:id/approve', async (req, res) => {
-  const request = await approveAccessRequest(Number(req.params.id), req.user!.id)
-  res.json({ ok: true, request })
+  try {
+    const request = await approveAccessRequest(Number(req.params.id), req.user!.id)
+    res.json({ ok: true, request })
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message })
+  }
 })
 
 accessRouter.post('/:id/deny', (req, res) => {

@@ -82,7 +82,12 @@ export async function grantDriveAccess(
   uuid: string,
   decidedBy?: number
 ): Promise<void> {
-  if (!user.home) return
+  if (!user.home) {
+    // A userspace ACL is keyed on the user's home folder, so without one there
+    // is nothing to grant. Fail loudly instead of silently reporting success —
+    // callers must never return a false 'granted'.
+    throw new Error(`Cannot grant drive access: ${user.username} has no home folder.`)
+  }
   setAcl(user.id, uuid, user.home, 'write')
   await ensureUserHomeDir(uuid, user.home)
   await writeUsersManifest(uuid)
