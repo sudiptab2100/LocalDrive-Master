@@ -19,6 +19,7 @@ import { hasPermission } from '../../auth.js'
 import { requireAuth } from '../middleware.js'
 import { driveScope } from '../scope.js'
 import { bumpStat, logActivity } from '../../db/index.js'
+import { fileChanged } from '../../changes.js'
 import { parentOf } from '../../util/paths.js'
 
 export const filesRouter = Router()
@@ -58,6 +59,13 @@ filesRouter.post('/mkdir', requireAuth, async (req, res) => {
   try {
     await makeDir(String(drive), full, name)
     logActivity('mkdir', { userId: req.user!.id, username: req.user!.username, detail: `${path}/${name}` })
+    fileChanged({
+      action: 'mkdir',
+      driveUuid: String(drive),
+      path: full,
+      userId: req.user!.id,
+      username: req.user!.username
+    })
     res.json({ ok: true })
   } catch (e) {
     res.status(400).json({ error: (e as Error).message })
@@ -74,6 +82,13 @@ filesRouter.post('/rename', requireAuth, async (req, res) => {
     return res.status(403).json({ error: 'Permission denied' })
   try {
     await renameEntry(String(drive), full, newName)
+    fileChanged({
+      action: 'rename',
+      driveUuid: String(drive),
+      path: parentOf(full),
+      userId: req.user!.id,
+      username: req.user!.username
+    })
     res.json({ ok: true })
   } catch (e) {
     res.status(400).json({ error: (e as Error).message })
@@ -97,6 +112,13 @@ filesRouter.post('/move', requireAuth, async (req, res) => {
   }
   try {
     await moveEntries(String(drive), fullSources, destFull)
+    fileChanged({
+      action: 'move',
+      driveUuid: String(drive),
+      path: destFull,
+      userId: req.user!.id,
+      username: req.user!.username
+    })
     res.json({ ok: true })
   } catch (e) {
     res.status(400).json({ error: (e as Error).message })
@@ -120,6 +142,13 @@ filesRouter.post('/copy', requireAuth, async (req, res) => {
   }
   try {
     await copyEntries(String(drive), fullSources, destFull)
+    fileChanged({
+      action: 'copy',
+      driveUuid: String(drive),
+      path: destFull,
+      userId: req.user!.id,
+      username: req.user!.username
+    })
     res.json({ ok: true })
   } catch (e) {
     res.status(400).json({ error: (e as Error).message })
@@ -141,6 +170,13 @@ filesRouter.post('/delete', requireAuth, async (req, res) => {
   try {
     await deleteEntries(String(drive), fullPaths)
     logActivity('delete', { userId: req.user!.id, username: req.user!.username, detail: paths.join(', ') })
+    fileChanged({
+      action: 'delete',
+      driveUuid: String(drive),
+      path: parentOf(fullPaths[0]),
+      userId: req.user!.id,
+      username: req.user!.username
+    })
     res.json({ ok: true })
   } catch (e) {
     res.status(400).json({ error: (e as Error).message })

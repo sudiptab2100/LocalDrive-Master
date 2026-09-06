@@ -118,6 +118,21 @@ A tiny `EventEmitter` (`bus`) with these events:
 - `accessRequestsChanged` → main forwards to the renderer (`evt:accessRequestsChanged`),
   updates the Users tab badge, and shows "New access request — <user> wants <drive>" for
   new drive access requests.
+- `filesChanged` → emitted by `fileChanged()` (`src/server/changes.ts`) on file mutations
+  (mkdir/rename/move/copy/delete/upload). Fans out to the user-scoped SSE stream
+  `GET /api/events/user` and is persisted to the `changes` table for the
+  `GET /api/changes` polling feed. Consumed by native clients (the mobile app) for live and
+  background notifications; see [http-api.md](http-api.md).
+
+## LAN discovery (`src/server/discovery.ts`)
+`startDiscovery()` publishes several Bonjour/mDNS services so LAN clients can find the
+server without typing an address:
+- **`_localdrive._tcp`** — a dedicated, unambiguous service type for native clients (the
+  mobile app) with TXT records `path`, `api`, `https` (`0`/`1`), `httpsPort`. Preferred
+  over scanning every HTTP host.
+- **`_http._tcp`** / **`_webdav._tcp`** (name "LocalDrive") — generic advertisements for
+  browsers and WebDAV clients; HTTPS variants (`_https._tcp`, `_webdavs._tcp`) are added
+  when HTTPS is enabled. Discovery stops on `ServerManager.stop()`.
 
 ## Standalone server mode (`src/server/standalone.ts`)
 `npm run server:dev` runs the server with **no Electron** (via `tsx watch`). It bootstraps

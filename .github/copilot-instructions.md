@@ -13,6 +13,12 @@ with admin approval, and **graceful no‑data‑loss restart**. The desktop cont
 center is **also served as a browser‑based admin control panel** (`/admin`, admins
 only), and the app can run **headless** (no window) from a terminal.
 
+A companion **native mobile app** (Flutter iOS/Android) lives in the sibling repo
+`LocalDrive-App` and is a pure client of this server's HTTP API. It relies on a few
+**backward‑compatible** additions here — the `_localdrive._tcp` mDNS service, user‑scoped
+SSE `GET /api/events/user`, and the `GET /api/changes` polling feed. Keep these additive
+and documented in [`docs/http-api.md`](../docs/http-api.md); don't break their shapes.
+
 ## Tech stack
 - **Electron 33** (main + preload + renderer), **React 18**, **TypeScript (strict, ESM)**.
 - Build: **electron-vite** (app) + **Vite** (web PWA) + **electron-builder** (DMG/zip).

@@ -27,7 +27,11 @@ honest.
 | Grid / list views, hidden‑file toggle, dark/light theme | ✅ | Persisted in `localStorage` |
 | **WebDAV** mount (`/dav/<Drive>/`) | ✅ | Per‑user rooted; HTTP Basic; works on Android/desktop clients |
 | Connect helper (URLs + **QR code**) | ✅ | `/api/connect`, desktop Connect tab |
-| Phone photo auto‑backup | ✅ | Via a WebDAV auto‑upload client on the phone (documented workflow, not a bespoke server feature) |
+| Phone photo auto‑backup | ✅ | Native **LocalDrive-App** (Flutter iOS/Android) with a built‑in backup engine; also possible via any WebDAV auto‑upload client |
+| Native **mobile app** (iOS/Android) | ✅ | Separate repo `LocalDrive-App`: mDNS/QR/manual connect, files, admin console, notifications, auto‑backup |
+| mDNS service for native discovery | ✅ | `_localdrive._tcp` advertised alongside `_http._tcp` (TXT: path/api/https/httpsPort) |
+| User‑scoped live events (SSE) | ✅ | `GET /api/events/user` (cookie **or** bearer) — `filesChanged`/`accessChanged`/`drivesChanged` for the app |
+| Background changes feed | ✅ | `GET /api/changes?since=` compact polling feed for background notifications |
 
 ## Accounts, security, admin
 | Feature | Status | Notes |

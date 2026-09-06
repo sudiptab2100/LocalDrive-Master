@@ -132,14 +132,41 @@ returns `restarted: true`; other changes return `restarted: false`. Successful s
 | POST | `/:id/approve` | Approve the request using `approveAccessRequest`. |
 | POST | `/:id/deny` | Deny the request using `denyAccessRequest`. |
 
-## Server-Sent Events — `/api/events` (`routes/events.ts`, **admin-only**)
-`GET /api/events` opens an SSE stream for the browser admin panel. EventSource cannot
-send custom headers, so it authenticates with the same-origin httpOnly `ld_token` cookie
-set by `/api/auth/login`.
+## Server-Sent Events — `/api/events` (`routes/events.ts`)
+`GET /api/events` (**admin-only**) opens an SSE stream for the browser admin panel.
+EventSource cannot send custom headers, so it authenticates with the same-origin httpOnly
+`ld_token` cookie set by `/api/auth/login`. Named events: `statusChanged`, `drivesChanged`,
+`registrationsChanged`, `accessRequestsChanged`, and `configChanged`. The stream also sends
+a keepalive comment about every 25 seconds.
 
-Named events: `statusChanged`, `drivesChanged`, `registrationsChanged`,
-`accessRequestsChanged`, and `configChanged`. The stream also sends a keepalive comment
-about every 25 seconds.
+`GET /api/events/user` (**auth**) is a **user-scoped** live stream for native clients (the
+mobile app). It authenticates via cookie **or** `Authorization: Bearer <token>` like every
+other route. After an initial `hello`, it emits:
+
+| Event | Payload | When |
+| --- | --- | --- |
+| `filesChanged` | `{ drive, path, action, by, at }` | A file the caller can **read** changed. `path` is mapped into the caller's own scope (`scopeOut`); admins in `user` view see only their home, in `admin` view the whole share. Filtered by `hasPermission(read)`. |
+| `accessChanged` | `{}` | A drive access request/grant changed — the client refetches `GET /api/drives`. |
+| `drivesChanged` | `{}` | The drive registry changed — the client refetches drive lists. |
+
+Keepalive comment every ~25 s. Used for real-time notifications while the app is foregrounded.
+
+## Changes feed — `/api/changes` (`routes/changes.ts`)
+`GET /api/changes?since=<iso>` (**auth**, cookie or bearer) is a compact polling feed for
+**background sync** — the mobile app wakes periodically (WorkManager/BGTask) and surfaces
+new activity as local notifications without holding an SSE connection.
+
+- Without `since`, returns `{ changes: [], cursor }` where `cursor` is the current time, so
+  a first poll never floods the client with history. Subsequent polls pass the previous
+  `cursor` back as `since`.
+- With `since`, returns `{ changes, cursor }` where each change is either a **file** the
+  caller can read — `{ id, kind:'file', action, drive, path, by, at }` with `path` mapped
+  into the caller's scope and gated by `hasPermission(read)` — or a generic
+  `{ id, kind:'access'|'drive', action, at }` ping. Capped at 300 rows.
+
+Backed by the `changes` table (`db/index.ts`: `recordChange`/`getChangesSince`); file
+mutations record a change via `fileChanged()` (`server/changes.ts`) which also emits on the
+event bus for `/api/events` and `/api/events/user`.
 
 ## Utility routes (in `app.ts`)
 | Method | Path | Auth | Notes |

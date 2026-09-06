@@ -80,6 +80,18 @@ CREATE TABLE IF NOT EXISTS activity (
 );
 CREATE INDEX IF NOT EXISTS idx_activity_ts ON activity(ts DESC);
 
+CREATE TABLE IF NOT EXISTS changes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT NOT NULL DEFAULT (datetime('now')),
+  kind TEXT NOT NULL,
+  action TEXT NOT NULL,
+  drive_uuid TEXT,
+  path TEXT,
+  user_id INTEGER,
+  username TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_changes_ts ON changes(ts DESC);
+
 CREATE TABLE IF NOT EXISTS stats (
   key TEXT PRIMARY KEY,
   value INTEGER NOT NULL DEFAULT 0
@@ -198,4 +210,73 @@ export function logActivity(
   getDb()
     .prepare('INSERT INTO activity(user_id, username, action, detail, ip) VALUES(?,?,?,?,?)')
     .run(opts.userId ?? null, opts.username ?? null, action, opts.detail ?? null, opts.ip ?? null)
+}
+
+/** A recorded change, for the user-facing changes feed and live events. */
+export interface ChangeRow {
+  id: number
+  ts: string
+  kind: string
+  action: string
+  driveUuid: string | null
+  path: string | null
+  userId: number | null
+  username: string | null
+}
+
+interface ChangeDbRow {
+  id: number
+  ts: string
+  kind: string
+  action: string
+  drive_uuid: string | null
+  path: string | null
+  user_id: number | null
+  username: string | null
+}
+
+function mapChange(r: ChangeDbRow): ChangeRow {
+  return {
+    id: r.id,
+    ts: r.ts,
+    kind: r.kind,
+    action: r.action,
+    driveUuid: r.drive_uuid,
+    path: r.path,
+    userId: r.user_id,
+    username: r.username
+  }
+}
+
+/**
+ * Append a change record (file/access/drive mutation) and return the stored
+ * row. Backs the `/api/changes` polling feed and the user-facing SSE stream.
+ * `path` should be the full drive-relative path so consumers can permission-
+ * check and map it back into each viewer's own scope.
+ */
+export function recordChange(c: {
+  kind: string
+  action: string
+  driveUuid?: string | null
+  path?: string | null
+  userId?: number | null
+  username?: string | null
+}): ChangeRow {
+  const info = getDb()
+    .prepare(
+      'INSERT INTO changes(kind, action, drive_uuid, path, user_id, username) VALUES(?,?,?,?,?,?)'
+    )
+    .run(c.kind, c.action, c.driveUuid ?? null, c.path ?? null, c.userId ?? null, c.username ?? null)
+  const row = getDb()
+    .prepare('SELECT * FROM changes WHERE id = ?')
+    .get(info.lastInsertRowid) as ChangeDbRow
+  return mapChange(row)
+}
+
+/** Recent changes strictly after `sinceIso` (ISO or SQLite datetime), oldest first. */
+export function getChangesSince(sinceIso: string, limit = 300): ChangeRow[] {
+  const rows = getDb()
+    .prepare('SELECT * FROM changes WHERE ts > datetime(?) ORDER BY ts ASC, id ASC LIMIT ?')
+    .all(sinceIso, limit) as ChangeDbRow[]
+  return rows.map(mapChange)
 }

@@ -11,6 +11,7 @@ import { hasPermission, getUserHome } from '../../auth.js'
 import { scopeIn } from '../../util/fs-safe.js'
 import { finalizeUpload } from '../../files.js'
 import { bumpStat, logActivity } from '../../db/index.js'
+import { fileChanged } from '../../changes.js'
 import type { User } from '../../../shared/types.js'
 
 /**
@@ -70,6 +71,13 @@ const tus = new TusServer({
       userId: user?.id ?? null,
       username: user?.username ?? null,
       detail: `${meta.path || ''}/${filename}`
+    })
+    fileChanged({
+      action: 'upload',
+      driveUuid: drive,
+      path: destFull,
+      userId: user?.id ?? null,
+      username: user?.username ?? null
     })
     return { res }
   }

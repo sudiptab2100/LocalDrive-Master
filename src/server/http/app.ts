@@ -13,6 +13,7 @@ import { accessRouter } from './routes/access.js'
 import { configRouter } from './routes/config.js'
 import { serverRouter } from './routes/server.js'
 import { eventsRouter } from './routes/events.js'
+import { changesRouter } from './routes/changes.js'
 import { getStatus } from '../status.js'
 import { getCaCertPem } from '../tls.js'
 import { qrDataUrl } from '../discovery.js'
@@ -78,6 +79,7 @@ export function createApp(opts: AppOptions = {}): Express {
   app.use('/api/config', configRouter)
   app.use('/api/server', serverRouter)
   app.use('/api/events', eventsRouter)
+  app.use('/api/changes', changesRouter)
 
   // Connection info + QR code for easy device onboarding.
   app.get('/api/connect', requireAuth, async (_req, res) => {
