@@ -13,7 +13,8 @@ A native macOS (Electron) app that turns an external drive or folder into a priv
 Wi‑Fi/LAN network drive. It embeds an Express HTTP + WebDAV server, a browser PWA, a
 browser admin control panel, per‑user private home folders with role/permission-based
 access control, resumable uploads, search, thumbnails, optional self‑signed HTTPS, and
-self‑registration with admin approval. The server can also run headless, can
+self‑registration with admin approval, and owner-bound mobile backup receipts.
+The server can also run headless, can
 stop/crash/restart with no data loss, and drives can be hot‑added.
 
 ## Reading order
@@ -29,6 +30,8 @@ stop/crash/restart with no data loss, and drives can be hot‑added.
 9. [features.md](features.md) — feature catalog and implemented‑vs‑roadmap status.
 10. [conventions.md](conventions.md) — coding conventions, safety patterns, gotchas.
 11. [glossary.md](glossary.md) — domain vocabulary.
+12. [background-backup.md](background-backup.md) — recoverable tus jobs, durable
+    receipts, no-clobber publication and isolated server regressions.
 
 ## Fast facts
 | Thing | Value |
@@ -38,7 +41,8 @@ stop/crash/restart with no data loss, and drives can be hot‑added.
 | UI | React 18 (shared desktop/admin renderer + web PWA) |
 | Default HTTP port | `4820` |
 | Default HTTPS port | `4843` (opt‑in) |
-| Health check | `GET /api/health` → `{ ok: true, status }` |
+| Health check | `GET /api/health` → `{ ok: true, status, capabilities }`; `backgroundBackupTus = 1` |
+| Mobile backup recovery | `/api/backup/uploads/:jobId`; owner-only receipts, bytes stay on tus `/api/upload` |
 | Admin panel | `http://<host>:4820/admin` (admin-only) |
 | WebDAV mount | `http://<host>:4820/dav/<DriveName>/` |
 | Config + DB dir | `~/Library/Application Support/LocalDrive/` |

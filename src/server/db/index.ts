@@ -57,6 +57,28 @@ CREATE TABLE IF NOT EXISTS access_requests (
 );
 CREATE INDEX IF NOT EXISTS idx_access_status ON access_requests(status);
 
+CREATE TABLE IF NOT EXISTS backup_uploads (
+  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id TEXT NOT NULL,
+  upload_id TEXT NOT NULL UNIQUE,
+  drive_uuid TEXT NOT NULL,
+  share_root TEXT NOT NULL,
+  home TEXT NOT NULL,
+  path TEXT NOT NULL,
+  requested_filename TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  size INTEGER NOT NULL CHECK (size >= 0),
+  sha256 TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'uploading'
+    CHECK (state IN ('uploading', 'finalizing', 'complete', 'failed')),
+  stage_created INTEGER NOT NULL DEFAULT 0,
+  error_code TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT,
+  PRIMARY KEY (owner_id, job_id)
+);
+
 CREATE TABLE IF NOT EXISTS shares (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   token TEXT UNIQUE NOT NULL,

@@ -75,6 +75,40 @@ Resumable, chunked uploads via the **tus** protocol (`@tus/server` + `FileStore`
   `bytes_in`/`uploads`. An interrupted upload can resume; a crash never leaves a partial
   file at the destination.
 
+### Opt-in recoverable background backup
+
+Add **both** tus metadata fields `backupJobId` (UUID) and `backupSha256` (64
+lowercase hex) plus a fixed `Upload-Length`. Keep `filename`, `drive`, `path`,
+bearer authentication and `Cookie: ld_view=user`. These jobs are owner-bound and
+always confined to private user space, including for administrators. Current
+write permission is checked on creation, recovery, HEAD/PATCH and finalization.
+
+`GET /api/backup/uploads/:jobId` is authenticated, status-only and `no-store`.
+Backup operations require bearer authentication; they never fall back to a cookie
+account when that token is missing or invalid. Ordinary tus cookie/Basic clients
+are unchanged.
+Unknown or other-owner jobs return `404`; an owner with revoked access receives
+`403`. The response is:
+
+```text
+{ jobId, state: "uploading"|"finalizing"|"complete"|"failed",
+  uploadUrl: "/api/upload/<id>", size, sha256, drive, path, filename, remotePath,
+  offset?, error?, errorCode?, retryable? }
+```
+
+`path` uses `""` for the private root. `filename`/`remotePath` are the actual
+collision-safe destination. Duplicate creates return `409`; recover with GET and
+validate immutable size/hash/drive/path. A complete receipt is authoritative even
+after a lost PATCH response; completed backup HEAD/PATCH returns `410`.
+An offset equal to size without a receipt can still mean `finalizing`.
+
+Unrelated files are never overwritten; exact size/SHA-256-verified content may
+be adopted. Partial/full transfers survive restart and an offline destination
+(`uploading`/`finalizing` with `destination_offline`), and resume after remount.
+Receipt replay does not re-finalize or double-count. See
+[background-backup.md](background-backup.md) for recovery ordering, errors,
+native no-replace publication and isolated regression commands.
+
 ## Search — `/api/search` (`routes/search.ts`)
 | Method | Path | Auth | Params | Notes |
 | --- | --- | --- | --- | --- |
@@ -171,7 +205,7 @@ event bus for `/api/events` and `/api/events/user`.
 ## Utility routes (in `app.ts`)
 | Method | Path | Auth | Notes |
 | --- | --- | --- | --- |
-| GET | `/api/health` | public | `{ ok:true, status: ServerStatus }` — used by the deploy health poll. |
+| GET | `/api/health` | public | `{ ok:true, status: ServerStatus, capabilities: { backgroundBackupTus: 1 } }` — additive feature discovery and health poll. |
 | GET | `/api/cert` | public | Root CA cert (`application/x-x509-ca-cert`) for client trust install; `404` if HTTPS never enabled. |
 | GET | `/api/connect` | auth | `{ urls, hostname, qr, addresses, httpsEnabled, port, httpsPort }` — structured pieces so the client composes a URL (protocol · host · service) and renders the QR locally; `urls`/`qr` kept as fallback. |
 

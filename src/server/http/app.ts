@@ -6,6 +6,7 @@ import { authRouter } from './routes/auth.js'
 import { drivesRouter } from './routes/drives.js'
 import { filesRouter } from './routes/files.js'
 import { uploadRouter } from './routes/uploads.js'
+import { backupRouter } from './routes/backup.js'
 import { searchRouter } from './routes/search.js'
 import { statsRouter } from './routes/stats.js'
 import { usersRouter } from './routes/users.js'
@@ -52,7 +53,7 @@ export function createApp(opts: AppOptions = {}): Express {
 
   // Health check (unauthenticated).
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, status: getStatus() })
+    res.json({ ok: true, status: getStatus(), capabilities: { backgroundBackupTus: 1 } })
   })
 
   // Download the root CA certificate for client trust installation. The CA
@@ -72,6 +73,7 @@ export function createApp(opts: AppOptions = {}): Express {
   app.use('/api/auth', authRouter)
   app.use('/api/drives', drivesRouter)
   app.use('/api/files', filesRouter)
+  app.use('/api/backup/uploads', backupRouter)
   app.use('/api/search', searchRouter)
   app.use('/api/stats', statsRouter)
   app.use('/api/users', usersRouter)

@@ -1,6 +1,6 @@
 import type { Request } from 'express'
 import * as cookie from 'cookie'
-import { getUserHome, homeNameFor } from '../auth.js'
+import { getUserHome, homeNameFor, isHomeTaken } from '../auth.js'
 import { scopeIn, scopeOut } from '../util/fs-safe.js'
 import { ensureUserHomeDir } from '../provisioning.js'
 import type { User } from '../../shared/types.js'
@@ -31,6 +31,17 @@ export function viewModeFor(req: Request, user: User): ViewMode {
   if (user.role !== 'admin') return 'user'
   const cookies = cookie.parse(req.headers.cookie || '')
   return cookies['ld_view'] === 'user' ? 'user' : 'admin'
+}
+
+/** Backup destinations always belong to the owner's private space, even for admins. */
+export function privateDriveScope(user: User, driveUuid: string): DriveScope | null {
+  const home = user.role === 'admin' ? homeNameFor(user.username) : getUserHome(user, driveUuid)
+  if (!home || isHomeTaken(home, user.id)) return null
+  return {
+    home,
+    in: (p) => scopeIn(home, p),
+    out: (p) => scopeOut(home, p)
+  }
 }
 
 /**

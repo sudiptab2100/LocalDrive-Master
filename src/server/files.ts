@@ -5,7 +5,7 @@ import mime from 'mime-types'
 import { getShareRoot, resolveInDrive, getDriveAppDir } from './drives/registry.js'
 import { getDb } from './db/index.js'
 import { normalizeApiPath, isSafeName } from './util/fs-safe.js'
-import { moveAtomic } from './util/atomic.js'
+import { copyAtomicNoReplace, moveAtomic } from './util/atomic.js'
 import type { FileEntry } from '../shared/types.js'
 
 /** High-level file operations on a registered drive's share root. */
@@ -138,14 +138,19 @@ export async function finalizeUpload(
   uuid: string,
   destDir: string,
   filename: string,
-  tmpAbsPath: string
+  tmpAbsPath: string,
+  options?: { noReplacePart: string }
 ): Promise<string> {
   if (!isSafeName(filename)) throw new Error('Invalid filename')
   const dir = await resolveInDrive(uuid, destDir)
   if (!dir) throw new Error('Invalid destination')
   await fs.mkdir(dir, { recursive: true })
   const finalPath = join(dir, filename)
-  await moveAtomic(tmpAbsPath, finalPath)
+  if (options) {
+    await copyAtomicNoReplace(tmpAbsPath, finalPath, options.noReplacePart)
+  } else {
+    await moveAtomic(tmpAbsPath, finalPath)
+  }
   return finalPath
 }
 

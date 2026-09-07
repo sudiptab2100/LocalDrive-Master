@@ -16,8 +16,10 @@ only), and the app can run **headless** (no window) from a terminal.
 A companion **native mobile app** (Flutter iOS/Android) lives in the sibling repo
 `LocalDrive-App` and is a pure client of this server's HTTP API. It relies on a few
 **backward‑compatible** additions here — the `_localdrive._tcp` mDNS service, user‑scoped
-SSE `GET /api/events/user`, and the `GET /api/changes` polling feed. Keep these additive
-and documented in [`docs/http-api.md`](../docs/http-api.md); don't break their shapes.
+SSE `GET /api/events/user`, the `GET /api/changes` polling feed, and recoverable tus
+backup jobs/receipts (`backgroundBackupTus = 1`). Keep them additive and documented
+in [`docs/http-api.md`](../docs/http-api.md) and
+[`docs/background-backup.md`](../docs/background-backup.md).
 
 ## Tech stack
 - **Electron 33** (main + preload + renderer), **React 18**, **TypeScript (strict, ESM)**.
@@ -66,6 +68,11 @@ npm run dist           # produce release/ DMG + zip (electron-builder)
 - **Path confinement is mandatory.** All user paths go through `safeResolve` /
   `scopeIn` / `scopeOut` (`src/server/util/fs-safe.ts` + `http/scope.ts`). Never join a
   client path onto a drive root without them.
+- **Backup recovery stays tus.** Bytes use `/api/upload`; `/api/backup/uploads/:jobId`
+  is owner-only status/recovery. Require bearer auth and private scope even for admins.
+  Preserve immutable job/size/hash/destination identity and commit receipts/accounting
+  once. Never infer completion from length or use an overwriting publication fallback.
+  Ship the signed no-replace helper; retain unfinished stages across restarts/remounts.
 - **Opt‑in per‑drive access.** After login, non‑admins see all registered drives but have
   no drive access by default; they request each drive and an admin approves in the desktop
   Users tab (or `autoApproveAccessRequests` grants instantly). Approval creates or reuses
@@ -95,14 +102,17 @@ npm run dist           # produce release/ DMG + zip (electron-builder)
   `docs/http-api.md`.
 
 ## Deploy / install (proven workflow — `docs/build-deploy.md`)
-Docs-only changes need none of this. For shipping app changes:
-1. `for v in /Volumes/LocalDrive*; do [ -d "$v" ] && hdiutil detach "$v" -force; done`
-2. `npm run dist`
-3. Stop the running app: `pgrep -fl "/Applications/LocalDrive.app/Contents/MacOS/LocalDrive"`
-   then `kill -9 <LITERAL numeric pid>` (SIGKILL, a literal pid — never `pkill`/`killall`).
-4. `rm -rf /Applications/LocalDrive.app && cp -R release/mac-arm64/LocalDrive.app /Applications/ && xattr -dr com.apple.quarantine /Applications/LocalDrive.app && open -a /Applications/LocalDrive.app`
-5. Poll health: `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4820/api/health` → `200`.
-6. Confirm the served bundle matches the build: compare `curl -s http://127.0.0.1:4820/ | grep -o 'assets/index-[A-Za-z0-9_]*\.js'` with `ls out/webui/assets/index-*.js`.
+Docs-only changes need none of this. For an authorized local app update:
+1. Build without publishing: `npm run package -- --publish never`.
+2. Stage the complete bundle at an unused path; verify its signature and packaged
+   `Contents/Resources/native/rename-no-replace` helper.
+3. Wait for transfers to finish, then use the tray's **Quit LocalDrive**. Wait for
+   server shutdown and process exit; never SIGKILL a running upload as routine deployment.
+4. Keep the previous app bundle as rollback, activate the staged update, and
+   `open -a /Applications/LocalDrive.app`. Preserve all configuration, database and drive data.
+5. Confirm HTTP/HTTPS health and `capabilities.backgroundBackupTus = 1`. For web
+   changes, also compare the served asset hash with the build.
+6. Commit/push only when explicitly requested. See the full deploy playbook for details.
 
 ## Git
 - Remote `github.com/sudiptab2100/LocalDrive-Master`, branch **`main`**. Rebase before push
@@ -120,6 +130,7 @@ Start at [`docs/README.md`](../docs/README.md). Key pages:
 [ipc-api](../docs/ipc-api.md) ·
 [frontend](../docs/frontend.md) ·
 [build-deploy](../docs/build-deploy.md) ·
+[background-backup](../docs/background-backup.md) ·
 [features](../docs/features.md) ·
 [conventions](../docs/conventions.md) ·
 [glossary](../docs/glossary.md)

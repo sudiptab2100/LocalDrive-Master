@@ -9,7 +9,8 @@ DMG + zip into `release/`.
 | --- | --- | --- |
 | `dev` | `electron-vite dev` | Run the full desktop app (main+preload+renderer) with HMR |
 | `build:webui` | `vite build --config vite.webui.config.ts` | Build the web PWA → `out/webui` |
-| `build` | `build:webui` then `electron-vite build` | Full production build of all bundles |
+| `build:atomic-helper` | `node scripts/build-atomic-helper.mjs` | Universal macOS no-replace rename helper → `out/native` |
+| `build` | atomic helper, webui, admin, then `electron-vite build` | Full production build of all bundles |
 | `server:dev` | `tsx watch src/server/standalone.ts` | Run **just the server** (no Electron), auto‑reload |
 | `server:start` | `tsx src/server/standalone.ts` | Run the server once, standalone |
 | `typecheck:node` | `tsc -p tsconfig.node.json` | Type‑check main/preload/server/shared |
@@ -22,6 +23,13 @@ DMG + zip into `release/`.
 
 Standalone server env vars: `LOCALDRIVE_HOME` (data/config dir) and `LOCALDRIVE_WEBUI`
 (path to a built web UI to serve).
+
+`dev`, `server:dev` and `server:start` have a pre-hook to build the macOS atomic
+publication helper. This uses the existing Command Line Tools compiler; no compiler
+is needed by the packaged app. The helper supplies `RENAME_EXCL` for background
+backup destinations without hard links (for example exFAT). For focused checks,
+`build:atomic-helper -- --output <session-fixture-path>` keeps compiled artifacts
+isolated. See [background-backup.md](background-backup.md) for server regressions.
 
 ## Build system
 Two Vite configs, by design:
@@ -40,27 +48,39 @@ TS project split: **`tsconfig.node.json`** (Node/Electron/server + `src/shared`)
   `better-sqlite3`, `sharp`, `@img/**`.
 - **`extraResources`** copies `out/webui` → `Resources/webui` (the server serves it in
   production) and `build` → `Resources/build`.
+- `out/native` → `Resources/native` contains `rename-no-replace`; it is explicitly
+  included in the macOS signing binary list. Do not omit it from a server update.
 - `files`: `out/**/*` + `package.json`. Mac target: dmg + zip, **arm64**, icon
   `build/icon.png`.
-- The app is **unsigned** → first launch needs quarantine cleared (see
-  [conventions.md](conventions.md#operational-gotchas)).
+- Signing uses an available configured local identity; an unsigned build needs
+  explicit local trust. Local signing does not imply notarization. Check the
+  packaging output rather than assuming either condition.
 
-## Deploy playbook (proven install → verify → push)
-Use this to ship a code change to the local `/Applications` install. **Docs‑only changes
-skip all of this** — just commit & push.
+## Deploy playbook
+Use this for an authorized local application update. Docs-only changes do not
+require deployment; committing or pushing is a separate, explicitly requested action.
 
-1. **Detach stale DMG mounts:** `hdiutil detach` any `/Volumes/LocalDrive*`.
-2. **Build the installer:** `npm run dist` (produces `release/mac-arm64/LocalDrive.app`).
-3. **Quit the running app:** find it with `pgrep -fl LocalDrive`, then
-   `kill -9 <PID>` using the **literal** numeric pid. **Never** `pkill`/`killall`
-   (project rule — name‑based kills are forbidden).
-4. **Install:** `rm -rf /Applications/LocalDrive.app` then
-   `cp -R release/mac-arm64/LocalDrive.app /Applications/`, clear quarantine with
-   `xattr -dr com.apple.quarantine /Applications/LocalDrive.app`, and `open` it.
-5. **Verify health:** poll `GET http://localhost:4820/api/health` until `200`.
-6. **Verify the served bundle** matches the fresh build: the hashed asset the server
-   returns (e.g. `index-XXXX.js`) should equal the one in `out/webui/assets/`.
-7. **Push:** `git fetch && git rebase origin/main && git push origin main`.
+1. **Build without publishing:** `npm run package -- --publish never` produces
+   `release/mac-arm64/LocalDrive.app`; use `npm run dist -- --publish never` only
+   when installers are needed.
+2. **Stage the update before downtime:** copy the complete bundle to an unused,
+   explicitly named staging path. Verify its signature when signed and the
+   executable `Contents/Resources/native/rename-no-replace`.
+3. **Quiesce and quit:** wait for active transfers to finish, then use the tray's
+   **Quit LocalDrive**, which sets the quit flag and runs server shutdown.
+   Closing the window only hides it. Wait for the old listener and process to
+   exit; never use SIGKILL as the normal shutdown path during uploads.
+4. **Preserve rollback:** rename the old application bundle to an unused backup
+   path, then move the staged bundle to `/Applications/LocalDrive.app`. Do not
+   remove or replace `LOCALDRIVE_HOME`, its database/configuration, drive data,
+   or any drive's `.localdrive` metadata.
+5. **Start and inspect:** `open -a /Applications/LocalDrive.app`, then confirm
+   `GET http://127.0.0.1:4820/api/health` returns `200`. Confirm the configured
+   HTTPS listener too when enabled.
+6. **Confirm the expected update:** background backup requires
+   `capabilities.backgroundBackupTus = 1` on health. For web UI changes, compare
+   the served asset hash with `out/webui/assets/`. Keep the previous application
+   bundle available until the replacement is working.
 
 ## Repo / CI facts
 - Git repo: `github.com/sudiptab2100/LocalDrive-Master`, default branch **`main`**.

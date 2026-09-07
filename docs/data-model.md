@@ -14,6 +14,7 @@ stop/crash/restart never loses data.
 | Logs | `<configDir>/logs/main.log` |
 | TLS material | `<configDir>/tls/` (`ca.crt`, `ca.key`, `server.crt`, `server.key`, `leaf.json`) |
 | In‑progress uploads (tus) | `<configDir>/uploads/` |
+| Backup intent/receipt metadata | SQLite `backup_uploads` (no backup JSON sidecar) |
 | Per‑drive share root | `<mount>/LocalDrive/` (name = `config.shareRootName`) |
 | Per‑user home | `<mount>/LocalDrive/<home>/` |
 | Per‑drive app data | `<mount>/.localdrive/` |
@@ -71,6 +72,34 @@ the user's home ACL on that drive.
 ### `shares` — public share links *(schema present; API not yet wired — see features.md)*
 `(id, token UNIQUE, drive_uuid, path, permission, password_hash, expires_at, created_by,
 created_at)`.
+
+### `backup_uploads` — resumable backup intents and receipts
+
+Additive `CREATE TABLE IF NOT EXISTS`; existing users, ACLs and ordinary tus
+sidecars are unchanged.
+
+| Columns | Purpose |
+| --- | --- |
+| `owner_id`, `job_id` | Composite primary key; owner FK → users (`ON DELETE CASCADE`), UUID logical job |
+| `upload_id` | Unique opaque tus resource ID |
+| `drive_uuid`, `share_root`, `home`, `path` | Immutable drive, configured share root and private scoped destination |
+| `requested_filename`, `filename` | Original immutable name and actual collision-safe publication intent/receipt name |
+| `size`, `sha256` | Immutable byte count and content identity |
+| `state` | `uploading` / `finalizing` / `complete` / `failed` |
+| `stage_created` | Creation intent (`0`) versus durably initialized stage (`1`) |
+| `error_code` | Controlled error code, never a raw exception/request/credential |
+| `created_at`, `updated_at`, `completed_at` | ISO timestamps (`completed_at` nullable) |
+
+Backup-specific transactions temporarily use `synchronous=FULL`: persist creation
+before touching the stage, finalization intent before publishing, then atomically
+commit completion together with counters/activity/change feed before cleanup.
+Offsets come from staged file size, not an independently drifting DB counter.
+No tokens, cookies or arbitrary client metadata are stored.
+
+Unfinished data is not expired; an offline drive is resumable. Receipts are
+historical/idempotent even if an owner later moves/deletes the completed file.
+For the crash-boundary algorithm and retention limits see
+[background-backup.md](background-backup.md).
 
 ### `activity` — audit log
 `(id, ts, user_id, username, action, detail, ip)` with `idx_activity_ts (ts DESC)`.

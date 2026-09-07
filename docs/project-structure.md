@@ -19,6 +19,7 @@ vite.admin.config.ts      Build config for the /admin SPA (no service worker)
 tsconfig.node.json        Type-check project for main/preload/server/shared
 tsconfig.web.json         Type-check project for renderer + webui + admin
 build/                    App icon + tray template images (packaged as resources)
+scripts/                  Native helper build and isolated backup regression runner
 ```
 
 ## `src/main` — Electron main process
@@ -98,7 +99,8 @@ HTTP layer (`server/http/`):
   `requirePermission`; the `ld_token` cookie name.
 - **`scope.ts`** — `driveScope(req, driveUuid)` → `{ home, in(), out() }` confinement,
   including admin web view mode from the restrict‑only `ld_view` cookie.
-- **`routes/`** — `auth.ts`, `drives.ts`, `files.ts`, `uploads.ts` (tus), `search.ts`,
+- **`routes/`** — `auth.ts`, `drives.ts`, `files.ts`, `uploads.ts` (tus), `backup.ts`
+  (owner-scoped recovery/receipts), `search.ts`,
   `stats.ts`, `users.ts`, `server.ts`, `config.ts`, `access.ts`, `events.ts`.
 
 Auth / users / access:
@@ -123,6 +125,10 @@ Files / uploads / search:
 - **`http/routes/files.ts`** — REST for the above + `download`/`raw` (HTTP range),
   `zip` (streaming archiver), `thumb` (sharp, cached under `.localdrive/thumbs`).
 - **`http/routes/uploads.ts`** — tus server config + auth/authorize/finalize hooks.
+- **`backup-uploads.ts`** — backup-aware tus storage, receive/finalization locking,
+  recovery and collision-safe publication.
+- **`db/backup-uploads.ts`** — durable owner/job/upload mappings, publication intents,
+  receipts and exactly-once completion accounting.
 
 Networking / security / misc:
 - **`webdav.ts`** — build a per‑user, home‑rooted WebDAV handler over the registered drives.
@@ -132,7 +138,8 @@ Networking / security / misc:
   `bumpStat`/`getStats`, `logActivity`.
 - **`dashboard.ts`** — assemble the dashboard payload (transfers, drives, status, activity).
 - **`util/`** — `fs-safe.ts` (path confinement + name sanitizing), `atomic.ts`
-  (`moveAtomic`), `net.ts` (LAN IPs, URL building, QR pick), `paths.ts` (`parentOf`),
+  (`moveAtomic` and no-clobber backup publication), `rename-no-replace.c`
+  (macOS exclusive-rename fallback), `net.ts` (LAN IPs, URL building, QR pick), `paths.ts` (`parentOf`),
   `report.ts` (shared headless/standalone connection banner).
 
 ## `src/shared` — cross-process contracts
@@ -147,7 +154,11 @@ Networking / security / misc:
 out/main/index.cjs        out/preload/index.cjs
 out/renderer/…            out/webui/…  (index.html, assets/index-*.{js,css}, sw.js, workbox-*.js)
 out/admin/…               (/admin SPA, no service worker)
+out/native/rename-no-replace
 ```
 `electron-builder` packages `out/**` into `release/` (DMG + zip). The web PWA and admin
 panel are copied to the app bundle as extra resources (`webui`, `admin`), which the server
 serves as static files.
+The native helper is also copied to `Contents/Resources/native` and signed with the app.
+`scripts/build-atomic-helper.mjs` builds it; `scripts/background-backup-regression.ts`
+exercises recovery using isolated temporary accounts/storage, never the running NAS.

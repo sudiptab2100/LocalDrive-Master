@@ -78,6 +78,23 @@ This is why a normal user "sees their own files as the drive root":
 handlers additionally block operating on the home root itself (e.g. you can't rename or
 delete your own home folder: `full === scope.home` is rejected).
 
+### Recoverable backup uploads
+
+Opt-in `backupJobId`/`backupSha256` tus jobs bind ownership to the authenticated
+numeric user ID. `privateDriveScope` always confines them to the owner's home,
+including admins regardless of `ld_view`. Creation, status/receipt recovery,
+HEAD/PATCH and finalization recheck active status, registered drive and current
+directory write permission; metadata cannot select another owner. Backup operations
+require a bearer token and cannot silently fall back to another cookie account.
+Receipt lookups
+for unknown/other-owner jobs return `404`, including to admins.
+
+Backup directory traversal/internal paths and symlinked directory components are
+rejected. Existing target symlinks are not followed for content adoption. Adoption
+requires a verified regular file with exact size/SHA-256; otherwise publication
+uses atomic no-replace operations and records a unique actual name.
+See [background-backup.md](background-backup.md).
+
 ### Opt-in drive access (`src/server/access.ts`, `src/server/provisioning.ts`)
 Drive access for non‑admins is explicit and per drive:
 - `GET /api/drives` returns all registered drives but only annotates each with

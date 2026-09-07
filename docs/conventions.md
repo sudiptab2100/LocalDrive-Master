@@ -10,8 +10,9 @@ LocalDrive safe (no data loss) and secure (no path escapes / privilege bypass).
 - **Module boundaries:** the renderer talks only through `window.ld` (IPC); browsers talk
   only through `/api` + `/dav`. Never import server/Node modules into renderer/webui code,
   and keep secrets out of `AppConfigView`.
-- Add an IPC feature in three files at once (`shared/ipc.ts`, `preload`, `main`) — see
-  [ipc-api.md](ipc-api.md).
+- Add IPC features in `shared/ipc.ts`, `preload`, and `main`, plus the matching HTTP
+  route and `admin/ld-http.ts` shim. Preserve desktop/browser-admin parity; see
+  [ipc-api.md](ipc-api.md) and [http-api.md](http-api.md).
 - Type‑check with `npm run typecheck` before shipping. There is no separate lint gate.
 
 ## No‑data‑loss patterns (do not weaken)
@@ -19,6 +20,10 @@ LocalDrive safe (no data loss) and secure (no path escapes / privilege bypass).
   the **same filesystem**, then `rename` into place. `moveAtomic` does this and falls back
   to copy‑to‑temp‑then‑rename across devices (`EXDEV`). Uploads stage under
   `<configDir>/uploads/…` (tus) and are finalized with `finalizeUpload` → `moveAtomic`.
+- **Backup publication must not clobber.** Recoverable jobs use durable intents,
+  content verification, exclusive publication and an owner-bound receipt. Keep the
+  packaged `rename-no-replace` helper; never replace its fallback with plain rename.
+  Do not purge unfinished backup stages as generic tus cleanup.
 - **SQLite WAL + checkpoint.** The DB runs in WAL mode; `ServerManager.stop()` runs a
   `checkpoint()` so the WAL is flushed and the DB is consistent for the next start. Keep
   DB writes inside the app's helpers, not ad‑hoc connections.
@@ -48,10 +53,13 @@ LocalDrive safe (no data loss) and secure (no path escapes / privilege bypass).
   TLS. `/api/cert` exposes only the **public** CA cert.
 
 ## Operational gotchas
-- **Unsigned app → quarantine.** After copying the app to `/Applications`, run
-  `xattr -dr com.apple.quarantine /Applications/LocalDrive.app` or macOS blocks launch.
-- **Kill by literal pid only.** Stop the app with `kill -9 <PID>` from `pgrep -fl
-  LocalDrive`. `pkill` / `killall` are **forbidden** in this project.
+- **Verify local packages.** Check the complete app signature and packaged native
+  helper before activation. Use macOS's supported Open/Privacy & Security approval
+  for trusted local builds; follow [build-deploy.md](build-deploy.md).
+- **Stop gracefully.** Use the tray's Quit action or the terminal shutdown path, wait
+  for transfers/database shutdown, and keep a rollback bundle before replacement.
+  Never use SIGKILL as routine deployment. If an idle process remains after confirmed
+  shutdown, target only its verified PID; name-based process killing is forbidden.
 - **Detach DMGs before rebuilding.** Leftover `/Volumes/LocalDrive*` mounts break
   `npm run dist`; `hdiutil detach` them first.
 - **`.local` vs LAN IP.** mDNS `*.local` names don't resolve on every client; the Connect
@@ -70,3 +78,4 @@ LocalDrive safe (no data loss) and secure (no path escapes / privilege bypass).
 - Security internals: [security-rbac.md](security-rbac.md)
 - Data‑loss‑relevant layout: [data-model.md](data-model.md)
 - Deploy steps: [build-deploy.md](build-deploy.md)
+- Backup recovery: [background-backup.md](background-backup.md)

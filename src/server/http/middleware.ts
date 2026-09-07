@@ -48,6 +48,14 @@ export function resolveUser(req: Request): User | null {
   return u && u.status === 'active' ? u : null
 }
 
+/** Background jobs must never fall back from their account token to another cookie session. */
+export function resolveBearerUser(req: Request): User | null {
+  const authorization = req.headers.authorization
+  if (!authorization?.startsWith('Bearer ')) return null
+  const user = verifyToken(authorization.slice(7))
+  return user?.status === 'active' ? user : null
+}
+
 export function attachUser(req: Request, _res: Response, next: NextFunction): void {
   req.user = resolveUser(req) ?? undefined
   next()

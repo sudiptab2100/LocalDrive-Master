@@ -51,6 +51,11 @@ The **embedded server** (`src/server`) is shared by all of the above. `getDashbo
 drive registry, auth, and config are called both by HTTP routes and directly by IPC
 handlers in the main process (no HTTP hop for the desktop UI).
 
+The separate **LocalDrive-App** Flutter client uses the same HTTP API over the LAN.
+It stores account-isolated backup jobs, prepares work under platform scheduling/policy
+constraints, and uses native background URLSession for iOS transfers. It does not embed
+another server or require a new whole-file upload endpoint.
+
 ## Server composition (`src/server/http/app.ts`)
 `createApp()` wires middleware and routers in a **deliberate order**:
 
@@ -64,7 +69,7 @@ handlers in the main process (no HTTP hop for the desktop UI).
 4. `express.json({ limit: '5mb' })` — for the REST routes below.
 5. Unauthenticated utility routes: `GET /api/health`, `GET /api/cert`.
 6. Feature routers: `/api/auth`, `/api/drives`, `/api/files`, `/api/search`, `/api/stats`,
-   `/api/users`, `/api/server`, `/api/config`, `/api/access`, `/api/events`; plus
+   `/api/users`, `/api/server`, `/api/config`, `/api/access`, `/api/events`, `/api/backup`; plus
    `GET /api/connect` (auth’d, QR + URLs).
 7. Static admin panel (`out/admin`) mounted at `/admin` with an SPA fallback that excludes
    `/api` and `/dav`; this is mounted before the client PWA catch-all.
@@ -168,6 +173,11 @@ to reset and print admin credentials if the password is lost.
   under `~/Library/Application Support/LocalDrive/uploads/`, authorizes via
   `onUploadCreate`, then `onUploadFinish` calls `finalizeUpload` which `moveAtomic`s it
   onto the drive. See [http-api.md](http-api.md#uploads-tus).
+- **Mobile backs up a file:** bearer-authenticated tus creation with a stable job ID
+  and SHA-256 binds immutable private destination/owner metadata in SQLite. PATCHes
+  retain recoverable offsets; finalization publishes without replacement and commits
+  the receipt, counters and change event once. The owner recovers interruptions through
+  `/api/backup/uploads/:jobId`. See [background-backup.md](background-backup.md).
 - **Desktop shares a drive:** renderer `window.ld.drives.register(uuid)` → IPC →
   `registerDrive` → `bus.emit(drivesChanged)` → WebDAV rebuilds and both UIs refresh.
   Non‑admins then request the drive individually.

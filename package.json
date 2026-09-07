@@ -7,11 +7,15 @@
   "main": "./out/main/index.cjs",
   "type": "module",
   "scripts": {
+    "predev": "npm run build:atomic-helper",
     "dev": "electron-vite dev",
-    "build": "npm run build:webui && npm run build:admin && electron-vite build",
+    "build": "npm run build:atomic-helper && npm run build:webui && npm run build:admin && electron-vite build",
+    "build:atomic-helper": "node scripts/build-atomic-helper.mjs",
     "build:webui": "vite build --config vite.webui.config.ts",
     "build:admin": "vite build --config vite.admin.config.ts",
+    "preserver:dev": "npm run build:atomic-helper",
     "server:dev": "tsx watch src/server/standalone.ts",
+    "preserver:start": "npm run build:atomic-helper",
     "server:start": "tsx src/server/standalone.ts",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
@@ -40,6 +44,10 @@
     ],
     "extraResources": [
       {
+        "from": "out/native",
+        "to": "native"
+      },
+      {
         "from": "out/webui",
         "to": "webui"
       },
@@ -54,6 +62,9 @@
     ],
     "mac": {
       "category": "public.app-category.utilities",
+      "binaries": [
+        "Contents/Resources/native/rename-no-replace"
+      ],
       "target": [
         {
           "target": "dmg",

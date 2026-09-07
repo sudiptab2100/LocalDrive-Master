@@ -3,8 +3,9 @@
 Turn an external USB/HDD/SSD into a **private WiFi network drive**, controlled from a
 native macOS app. Any device on the same WiFi (iPhone, iPad, Android, Mac, Windows) can
 browse, upload, download, and stream your files through a browser or by mounting the drive
-over WebDAV. The server can stop, crash, and restart with **no data loss**, and new drives
-can be added at any time.
+over WebDAV, or use the companion native mobile app. Files and configuration persist
+across restarts, with atomic publication and graceful write draining; new drives can
+be added at any time.
 
 ## Highlights
 
@@ -13,10 +14,13 @@ can be added at any time.
   Dashboard/Drives/Users/Connect/Settings UI as the desktop app (admin-only).
 - **Headless mode** — run the packaged app without a window/tray while serving the web UI,
   WebDAV, and `/admin`.
-- **Two ways for clients to connect**
+- **Three client options**
   - **Web UI** — an installable, mobile‑first PWA with dark mode (open `http://<your-mac>.local:<port>`).
   - **WebDAV** — mount as a normal drive in Finder / Windows Explorer / Android; each
     account is rooted at its own private home folder (admins get the whole drive).
+  - **Native mobile app** — [LocalDrive-App](https://github.com/sudiptab2100/LocalDrive-App)
+    for iOS/Android: discovery/QR connection, multiple accounts, drive requests,
+    file management and account-owned photo/video/contact backup.
 - **Accounts + per‑folder permissions (RBAC)** — read / read‑write / admin per user, per folder.
 - **Self‑service sign‑up with admin approval** — visitors can register from the web login
   screen; new accounts stay **pending** (can't sign in or use WebDAV) until an admin approves
@@ -34,6 +38,8 @@ can be added at any time.
   web UI between **Admin view** (whole share) and **My space** (their own folder); WebDAV
   remains whole‑share for admins.
 - **Resumable, large uploads** (tus protocol via Uppy) — pause/resume, drag‑and‑drop, progress.
+- **Recoverable mobile backups** — owner-bound tus jobs, durable completion receipts,
+  checksum verification and collision-safe publication without overwriting unrelated files.
 - **Bulk actions + streaming ZIP** download of selected files/folders.
 - **Thumbnails & inline preview** for images, PDFs, text, audio, and video (HTTP range requests).
 - **Search** across filenames (SQLite FTS).
@@ -48,6 +54,8 @@ can be added at any time.
 
 - macOS on Apple Silicon (arm64).
 - Node.js 20+ and npm (for building from source).
+- Xcode Command Line Tools for the small native atomic-publication helper when building
+  from source. The packaged app includes the helper; end users do not need a compiler.
 - An external USB/HDD/SSD to share.
 
 ## Getting started (from source)
@@ -60,12 +68,14 @@ npm run dev          # run the desktop app in development
 ### Build a double‑clickable app
 
 ```bash
-npm run package      # unpacked .app  -> release/mac-arm64/LocalDrive.app
-npm run dist         # DMG + zip       -> release/
+npm run package -- --publish never  # unpacked .app -> release/mac-arm64/LocalDrive.app
+npm run dist -- --publish never     # DMG + zip -> release/
 ```
 
-> The app is not code‑signed. On first launch, right‑click the app → **Open**, or allow it
-> under **System Settings → Privacy & Security**.
+> Local packaging is not a notarized distribution workflow. For trusted local builds,
+> macOS may require right-click → **Open** or approval in **Privacy & Security**.
+> Follow [build/deploy instructions](docs/build-deploy.md) for signature/helper checks,
+> graceful shutdown and rollback-preserving updates.
 
 ## Using it
 
@@ -95,6 +105,25 @@ same drive. Admins see the whole `LocalDrive/` by default and can switch the web
 Central settings, accounts, and the drive registry live in
 `~/Library/Application Support/LocalDrive/`. Admins can also open `http://<host>:<port>/admin`
 to use the browser control panel.
+
+### Native mobile backup
+
+Install [LocalDrive-App](https://github.com/sudiptab2100/LocalDrive-App), sign in,
+request drive access if needed, and configure a destination for that account.
+Automatic preparation defaults to Wi-Fi and charging; **Back up now** bypasses
+charging only. Backups use private user space even for administrators.
+
+The server advertises `capabilities.backgroundBackupTus = 1` from `/api/health`.
+File bytes continue to use tus `/api/upload`; the additive
+`GET /api/backup/uploads/:jobId` endpoint recovers progress and durable completion
+receipts after interruptions or lost responses. Existing browser/WebDAV clients
+keep their normal behavior.
+
+iOS schedules scanning windows and uses native transfers for prepared files; it does
+not promise continuous execution or exact timing. Force-quitting the mobile app
+prevents automatic relaunch until reopened. The Mac must remain awake/reachable and
+the destination mounted. See the [backup protocol and durability limits](docs/background-backup.md)
+and the [mobile guide](https://github.com/sudiptab2100/LocalDrive-App/blob/development/docs/notifications-backup.md).
 
 
 ### Headless mode
@@ -130,6 +159,7 @@ src/
 | `npm run build`       | Build the web PWA + admin panel + Electron bundles into `out/` |
 | `npm run build:webui` | Build only the client PWA                               |
 | `npm run build:admin` | Build only the browser admin panel                     |
+| `npm run build:atomic-helper` | Build the universal no-replace publication helper (included in full builds) |
 | `npm run server:dev`  | Run the server standalone (no Electron) with hot reload |
 | `npm run typecheck`   | Type‑check the whole codebase                           |
 | `npm run package`     | Produce an unpacked `.app`                              |
@@ -151,9 +181,15 @@ src/
 
 ## Roadmap ideas
 
-Public share links (expiry + password), trash/version history, phone
-photo auto‑backup, two‑way sync client, media transcoding, per‑user quotas + SMART health
+Public share links (expiry + password), trash/version history,
+two‑way sync client, media transcoding, per‑user quotas + SMART health
 alerts, duplicate finder, guest drop‑box links, and secure off‑LAN access (Tailscale/WireGuard).
+
+## Documentation
+
+Start with the [knowledge base](docs/README.md), [HTTP API](docs/http-api.md),
+[background-backup contract](docs/background-backup.md), and
+[Copilot working brief](.github/copilot-instructions.md).
 
 ## License
 
